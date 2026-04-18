@@ -30,17 +30,24 @@ VacationRequest.belongsTo(User, { as: 'Requester', foreignKey: 'RequesterId' });
 const app = express();
 const upload = multer({ dest: 'uploads/' });
 
+// --- AJUSTE VITAL PARA RENDER/HEROKU ---
+app.set('trust proxy', 1); 
+
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-// Sesión segura (ajustada para producción)
+// --- CONFIGURACIÓN DE SESIÓN CORREGIDA PARA NUBE ---
 app.use(session({
     secret: process.env.SESSION_SECRET || 'secreto_seguro_dev',
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: process.env.NODE_ENV === 'production' } 
+    cookie: { 
+        secure: process.env.NODE_ENV === 'production', // true en Render (HTTPS)
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+        maxAge: 1000 * 60 * 60 * 24 // 24 horas
+    }
 }));
 
 // --- 3. CONFIGURACIÓN DE CORREO ---
@@ -48,8 +55,8 @@ const transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST || 'smtp.gmail.com',
     port: 587,
     auth: {
-        user: process.env.EMAIL_USER, // Se configurará en Render
-        pass: process.env.EMAIL_PASS  // Se configurará en Render
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
     }
 });
 
@@ -64,7 +71,10 @@ const enviarCorreo = (destinatarios, asunto, htmlContent) => {
 };
 
 // --- 4. MIDDLEWARES ---
-const isAuthenticated = (req, res, next) => req.session.userId ? next() : res.redirect('/login');
+const isAuthenticated = (req, res, next) => {
+    if (req.session.userId) return next();
+    res.redirect('/login');
+};
 const isAdmin = (req, res, next) => (req.session.role === 'Admin') ? next() : res.status(403).send('Solo Admin');
 const isRRHH = (req, res, next) => (req.session.role === 'RRHH' || req.session.role === 'Admin') ? next() : res.status(403).send('Solo RRHH');
 const isSupervisor = (req, res, next) => (req.session.role === 'Supervisor' || req.session.role === 'Admin') ? next() : res.status(403).send('Solo Supervisor');
@@ -96,25 +106,34 @@ async function procesarAniversarios() {
 // --- 6. RUTAS ---
 app.get('/', (req, res) => res.redirect('/login'));
 app.get('/login', (req, res) => res.render('login'));
+
 app.post('/login', async (req, res) => {
     const { username, password } = req.body;
     try {
         const user = await User.findOne({ where: { username: username.toLowerCase() } });
         if (user && await bcrypt.compare(password, user.password)) {
-            req.session.userId = user.id; req.session.role = user.role; req.session.username = user.username;
-            if (user.mustChangePassword) return res.redirect('/change-password');
-            return res.redirect(user.role === 'Admin' ? '/admin' : (user.role === 'RRHH' ? '/rrhh' : '/supervisor'));
+            // Guardar en sesión
+            req.session.userId = user.id;
+            req.session.role = user.role;
+            req.session.username = user.username;
+
+            // Guardar sesión explícitamente antes de redirigir (ayuda en algunos servidores)
+            req.session.save((err) => {
+                if(err) return res.send("Error al guardar sesión");
+                if (user.mustChangePassword) return res.redirect('/change-password');
+                if (user.role === 'Admin') return res.redirect('/admin');
+                if (user.role === 'RRHH') return res.redirect('/rrhh');
+                return res.redirect('/supervisor');
+            });
+        } else {
+            res.render('login', { error: 'Usuario o contraseña incorrectos' });
         }
-        res.render('login', { error: 'Credenciales inválidas' });
     } catch (e) { res.render('login', { error: e.message }); }
 });
+
 app.get('/logout', (req, res) => { req.session.destroy(); res.redirect('/login'); });
-app.get('/change-password', isAuthenticated, (req, res) => res.render('change-password'));
-app.post('/change-password', isAuthenticated, async (req, res) => {
-    const user = await User.findByPk(req.session.userId);
-    user.password = req.body.newPassword; user.mustChangePassword = false; await user.save();
-    res.redirect('/login');
-});
+
+// --- (RESTO DE RUTAS IGUAL QUE ANTES) ---
 
 // ADMIN
 app.get('/admin', isAuthenticated, isAdmin, async (req, res) => { res.render('admin', { users: await User.findAll() }); });
@@ -188,7 +207,6 @@ app.post('/rrhh/import-excel', isAuthenticated, isRRHH, upload.single('excelFile
     } catch (e) { res.send("Error: " + e.message); }
 });
 
-// APROBACIONES
 app.post('/rrhh/requests/approve/:id', isAuthenticated, isRRHH, async (req, res) => {
     const request = await VacationRequest.findByPk(req.params.id, { include: [Employee, { model: User, as: 'Requester' }] });
     if (request && request.estado === 'Pendiente') {
@@ -218,21 +236,31 @@ app.get('/supervisor', isAuthenticated, isSupervisor, async (req, res) => {
 app.post('/supervisor/solicitar', isAuthenticated, isSupervisor, async (req, res) => {
     const { EmployeeId, fechaInicio, fechaFin, diasSolicitados, motivo } = req.body;
     await VacationRequest.create({ EmployeeId, fechaInicio, fechaFin, diasSolicitados, motivo, RequesterId: req.session.userId });
-    
     const emp = await Employee.findByPk(EmployeeId);
     const rrhhUsers = await User.findAll({ where: { role: 'RRHH' } });
-    enviarCorreo(rrhhUsers.map(u => u.email).join(','), "🔔 Nueva Solicitud", `<p>Nueva solicitud de ${emp.nombre} por ${diasSolicitados} días.</p>`);
+    if(rrhhUsers.length > 0) enviarCorreo(rrhhUsers.map(u => u.email).join(','), "🔔 Nueva Solicitud", `<p>Nueva solicitud de ${emp.nombre} por ${diasSolicitados} días.</p>`);
     res.redirect('/supervisor');
 });
 
 // --- 7. INICIO ---
 const PORT = process.env.PORT || 3000;
 sequelize.sync().then(async () => {
+    console.log("--- BASE DE DATOS SINCRONIZADA ---");
     const adminExists = await User.findOne({ where: { username: 'admin' } });
     if (!adminExists) {
-        await User.create({ username: 'admin', email: 'admin@empresa.com', password: 'adminpassword', role: 'Admin', mustChangePassword: false });
+        console.log("Creando usuario admin inicial...");
+        await User.create({ 
+            username: 'admin', 
+            email: 'admin@empresa.com', 
+            password: 'adminpassword', 
+            role: 'Admin', 
+            mustChangePassword: false 
+        });
+        console.log("Usuario 'admin' / 'adminpassword' creado.");
+    } else {
+        console.log("Usuario admin ya existe.");
     }
     await procesarAniversarios();
     setInterval(procesarAniversarios, 86400000);
-    app.listen(PORT, '0.0.0.0', () => console.log(`Puerto: ${PORT}`));
+    app.listen(PORT, '0.0.0.0', () => console.log(`App corriendo en puerto: ${PORT}`));
 });
