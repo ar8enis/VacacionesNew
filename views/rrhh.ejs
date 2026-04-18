@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Panel RRHH - Gestión de Personal</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+</head>
+<body class="bg-light">
+
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm mb-4">
+        <div class="container">
+            <a class="navbar-brand" href="#"><i class="bi bi-people-fill"></i> RRHH - Vacaciones</a>
+            <div class="d-flex"><a href="/logout" class="btn btn-outline-light btn-sm">Cerrar Sesión</a></div>
+        </div>
+    </nav>
+
+    <div class="container pb-5">
+        <ul class="nav nav-tabs mb-4" id="rrhhTabs">
+            <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#solicitudes"><b>Solicitudes</b></button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#empleados">Empleados</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#areas">Áreas y Supervisores</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#turnos">Turnos</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabulador">Tabulador</button></li>
+            <li class="nav-item"><button class="nav-link text-success" data-bs-toggle="tab" data-bs-target="#importar"><b><i class="bi bi-file-earmark-excel"></i> Importar Excel</b></button></li>
+        </ul>
+
+        <div class="tab-content">
+            
+            <!-- SECCIÓN: SOLICITUDES -->
+            <div class="tab-pane fade show active" id="solicitudes">
+                <div class="card shadow-sm p-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5>Bandeja de Solicitudes</h5>
+                        <!-- BOTONES DE FILTRO -->
+                        <div class="btn-group shadow-sm" role="group">
+                            <button type="button" class="btn btn-outline-primary active" onclick="filtrarSol('Pendiente', this)">Pendientes</button>
+                            <button type="button" class="btn btn-outline-success" onclick="filtrarSol('Aprobado', this)">Aprobadas</button>
+                            <button type="button" class="btn btn-outline-danger" onclick="filtrarSol('Rechazado', this)">Rechazadas</button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="filtrarSol('Todas', this)">Todas</button>
+                        </div>
+                    </div>
+                    
+                    <div class="table-responsive mt-3">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Supervisor Solicitante</th>
+                                    <th>DNI</th>
+                                    <th>Empleado</th>
+                                    <th>Área</th>
+                                    <th>Fechas</th>
+                                    <th>Días</th>
+                                    <th>Motivo</th>
+                                    <th>Estado / Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% if(requests.length === 0) { %><tr><td colspan="9" class="text-center text-muted">No hay solicitudes.</td></tr><% } %>
+                                <% requests.forEach(req => { %>
+                                <tr class="sol-row" data-estado="<%= req.estado %>">
+                                    <td class="text-muted small"><%= new Date(req.createdAt).toLocaleDateString('es-ES') %></td>
+                                    
+                                    <!-- AQUI MOSTRAMOS QUIÉN SOLICITÓ -->
+                                    <td><span class="badge bg-info text-dark"><i class="bi bi-person"></i> <%= req.Requester ? req.Requester.username : 'Desconocido' %></span></td>
+                                    
+                                    <td><b><%= req.Employee.dni %></b></td>
+                                    <td><%= req.Employee.nombre %> <%= req.Employee.apellido %></td>
+                                    <td><span class="badge bg-secondary"><%= req.Employee.Area ? req.Employee.Area.nombre : 'S/A' %></span></td>
+                                    <td class="small">Del <b><%= req.fechaInicio %></b><br>al <b><%= req.fechaFin %></b></td>
+                                    <td><b><%= req.diasSolicitados %></b></td>
+                                    <td class="fst-italic text-muted small"><%= req.motivo %></td>
+                                    <td>
+                                        <% if(req.estado === 'Pendiente') { %>
+                                            <span class="badge bg-warning text-dark mb-2 d-block">Pendiente</span>
+                                            <div class="d-flex gap-1">
+                                                <form action="/rrhh/requests/approve/<%= req.id %>" method="POST">
+                                                    <button type="submit" class="btn btn-sm btn-success" title="Aprobar" onclick="return confirm('Al aprobar se descontarán <%= req.diasSolicitados %> días. ¿Continuar?')"><i class="bi bi-check-lg"></i></button>
+                                                </form>
+                                                <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#rejectModal<%= req.id %>" title="Rechazar">
+                                                    <i class="bi bi-x-lg"></i>
+                                                </button>
+                                            </div>
+
+                                            <!-- MODAL MOTIVO RECHAZO -->
+                                            <div class="modal fade" id="rejectModal<%= req.id %>" tabindex="-1">
+                                                <div class="modal-dialog">
+                                                    <div class="modal-content">
+                                                        <form action="/rrhh/requests/reject/<%= req.id %>" method="POST">
+                                                            <div class="modal-header bg-danger text-white">
+                                                                <h5 class="modal-title">Rechazar Solicitud</h5>
+                                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                                            </div>
+                                                            <div class="modal-body">
+                                                                <p>Motivo de rechazo para <b><%= req.Employee.nombre %></b>:</p>
+                                                                <textarea name="motivoRechazo" class="form-control" rows="3" required placeholder="Ej: Falta de personal..."></textarea>
+                                                            </div>
+                                                            <div class="modal-footer"><button type="submit" class="btn btn-danger w-100">Confirmar Rechazo</button></div>
+                                                        </form>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        <% } else if(req.estado === 'Rechazado') { %>
+                                            <span class="badge bg-danger">Rechazado</span><br>
+                                            <span class="text-muted small"><%= req.motivoRechazo %></span>
+                                        <% } else { %>
+                                            <span class="badge bg-success">Aprobado</span>
+                                        <% } %>
+                                    </td>
+                                </tr>
+                                <% }) %>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECCIÓN EMPLEADOS -->
+            <div class="tab-pane fade" id="empleados">
+                <div class="card shadow-sm p-4">
+                    <h5 class="mb-3">Registrar Nuevo Empleado</h5>
+                    <form action="/rrhh/employees" method="POST" class="row g-2 mb-4 border-bottom pb-4">
+                        <div class="col-md-2"><input type="text" name="nombre" class="form-control" placeholder="Nombre" required></div>
+                        <div class="col-md-2"><input type="text" name="apellido" class="form-control" placeholder="Apellido" required></div>
+                        <div class="col-md-2"><input type="text" name="dni" class="form-control" placeholder="DNI" required></div>
+                        <div class="col-md-2"><input type="date" name="fechaIngreso" class="form-control" required></div>
+                        <div class="col-md-2"><input type="number" step="0.5" name="diasDisponibles" class="form-control" placeholder="Días Iniciales"></div>
+                        <div class="col-md-2"><button type="submit" class="btn btn-success w-100">Registrar</button></div>
+                        <div class="col-md-6 mt-2">
+                            <select name="AreaId" class="form-select" required>
+                                <option value="">Seleccionar Área...</option>
+                                <% areas.forEach(area => { %><option value="<%= area.id %>"><%= area.nombre %></option><% }) %>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mt-2">
+                            <select name="ShiftId" class="form-select" required>
+                                <option value="">Seleccionar Turno...</option>
+                                <% shifts.forEach(shift => { %><option value="<%= shift.id %>"><%= shift.nombre %></option><% }) %>
+                            </select>
+                        </div>
+                    </form>
+
+                    <div class="d-flex justify-content-between align-items-center mb-3 mt-4">
+                        <h5>Lista de Empleados</h5>
+                        <form action="/rrhh/recalcular" method="POST">
+                            <button type="submit" class="btn btn-warning btn-sm shadow-sm"><b>↻ Recalcular Vacaciones</b></button>
+                        </form>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr><th>DNI</th><th>Nombre</th><th>Área</th><th>Turno</th><th>Antigüedad</th><th>Días Disp.</th><th>Acción</th></tr>
+                            </thead>
+                            <tbody>
+                                <% employees.forEach(emp => { %>
+                                <tr>
+                                    <td><b><%= emp.dni %></b></td>
+                                    <td><%= emp.nombre %> <%= emp.apellido %></td>
+                                    <td><span class="badge bg-secondary"><%= emp.Area ? emp.Area.nombre : 'S/A' %></span></td>
+                                    <td><%= emp.Shift ? emp.Shift.nombre : 'S/T' %></td>
+                                    <td><b><%= emp.ultimoAnioProcesado %> años</b></td>
+                                    <td><span class="badge bg-primary"><%= emp.diasDisponibles %> días</span></td>
+                                    <td><button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#editModal<%= emp.id %>"><i class="bi bi-pencil-square"></i> Editar</button></td>
+                                </tr>
+
+                                <!-- MODAL EDICIÓN EMPLEADO -->
+                                <div class="modal fade" id="editModal<%= emp.id %>" tabindex="-1">
+                                    <div class="modal-dialog">
+                                        <div class="modal-content">
+                                            <div class="modal-header bg-primary text-white">
+                                                <h5 class="modal-title">Editar Empleado</h5>
+                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <form action="/rrhh/employees/edit/<%= emp.id %>" method="POST">
+                                                <div class="modal-body">
+                                                    <div class="mb-2"><label class="small">Nombre</label><input type="text" name="nombre" class="form-control" value="<%= emp.nombre %>" required></div>
+                                                    <div class="mb-2"><label class="small">Apellido</label><input type="text" name="apellido" class="form-control" value="<%= emp.apellido %>" required></div>
+                                                    <div class="mb-2"><label class="small">DNI</label><input type="text" name="dni" class="form-control" value="<%= emp.dni %>" required></div>
+                                                    <div class="mb-2">
+                                                        <label class="small">Área</label>
+                                                        <select name="AreaId" class="form-select" required>
+                                                            <% areas.forEach(area => { %><option value="<%= area.id %>" <%= emp.AreaId === area.id ? 'selected' : '' %>><%= area.nombre %></option><% }) %>
+                                                        </select>
+                                                    </div>
+                                                    <div class="mb-2">
+                                                        <label class="small">Turno</label>
+                                                        <select name="ShiftId" class="form-select" required>
+                                                            <% shifts.forEach(shift => { %><option value="<%= shift.id %>" <%= emp.ShiftId === shift.id ? 'selected' : '' %>><%= shift.nombre %></option><% }) %>
+                                                        </select>
+                                                    </div>
+                                                    <div class="mb-2"><label class="small">Días Disp.</label><input type="number" step="0.5" name="diasDisponibles" class="form-control" value="<%= emp.diasDisponibles %>" required></div>
+                                                </div>
+                                                <div class="modal-footer"><button type="submit" class="btn btn-success w-100">Guardar Cambios</button></div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                                <% }) %>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECCIÓN ÁREAS -->
+            <div class="tab-pane fade" id="areas">
+                <div class="card shadow-sm p-4">
+                    <h5>Gestionar Áreas</h5>
+                    <form action="/rrhh/areas" method="POST" class="row g-3 mb-4">
+                        <div class="col-md-5"><input type="text" name="nombre" class="form-control" placeholder="Nombre Área" required></div>
+                        <div class="col-md-5">
+                            <select name="supervisores" class="form-select" multiple style="height: 100px;">
+                                <% users.forEach(user => { %><option value="<%= user.id %>"><%= user.username %></option><% }) %>
+                            </select>
+                        </div>
+                        <div class="col-md-2"><button type="submit" class="btn btn-primary w-100">Crear Área</button></div>
+                    </form>
+                    <table class="table">
+                        <thead><tr><th>Área</th><th>Supervisores</th><th>Acción</th></tr></thead>
+                        <tbody>
+                            <% areas.forEach(area => { %>
+                            <tr>
+                                <td><b><%= area.nombre %></b></td>
+                                <td>
+                                    <% if (area.Supervisores && area.Supervisores.length > 0) { %>
+                                        <% area.Supervisores.forEach(sup => { %> <span class="badge bg-dark"><%= sup.username %></span> <% }) %>
+                                    <% } else { %> <span class="text-muted">Ninguno</span> <% } %>
+                                </td>
+                                <td><button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editAreaModal<%= area.id %>"><i class="bi bi-pencil-square"></i> Editar</button></td>
+                            </tr>
+                            <!-- MODAL EDITAR ÁREA -->
+                            <div class="modal fade" id="editAreaModal<%= area.id %>" tabindex="-1">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <form action="/rrhh/areas/edit/<%= area.id %>" method="POST">
+                                            <div class="modal-header bg-primary text-white"><h5 class="modal-title">Editar Área</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+                                            <div class="modal-body">
+                                                <div class="mb-3"><label class="small fw-bold">Nombre</label><input type="text" name="nombre" class="form-control" value="<%= area.nombre %>" required></div>
+                                                <div class="mb-3">
+                                                    <label class="small fw-bold">Supervisores</label>
+                                                    <select name="supervisores" class="form-select" multiple style="height: 150px;">
+                                                        <% let currentSupIds = area.Supervisores ? area.Supervisores.map(s => s.id) :[]; %>
+                                                        <% users.forEach(user => { %>
+                                                            <option value="<%= user.id %>" <%= currentSupIds.includes(user.id) ? 'selected' : '' %>><%= user.username %></option>
+                                                        <% }) %>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer"><button type="submit" class="btn btn-success w-100">Guardar</button></div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            <% }) %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SECCIÓN TURNOS -->
+            <div class="tab-pane fade" id="turnos">
+                <div class="card shadow-sm p-4">
+                    <h5>Turnos</h5>
+                    <form action="/rrhh/shifts" method="POST" class="row g-3 mb-4">
+                        <div class="col-md-3"><input type="text" name="nombre" class="form-control" placeholder="Nombre" required></div>
+                        <div class="col-md-3"><input type="text" name="diasLaborales" class="form-control" placeholder="L,M,M,J,V"></div>
+                        <div class="col-md-2"><input type="time" name="horaEntrada" class="form-control"></div>
+                        <div class="col-md-2"><input type="time" name="horaSalida" class="form-control"></div>
+                        <div class="col-md-2"><input type="number" step="0.1" name="factorDescuento" class="form-control" value="1.0"></div>
+                        <div class="col-12"><button type="submit" class="btn btn-primary">Guardar</button></div>
+                    </form>
+                    <table class="table">
+                        <thead><tr><th>Turno</th><th>Horario</th><th>Factor</th></tr></thead>
+                        <tbody>
+                            <% shifts.forEach(s => { %><tr><td><%= s.nombre %></td><td><%= s.horaEntrada %> - <%= s.horaSalida %></td><td><%= s.factorDescuento %></td></tr><% }) %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SECCIÓN TABULADOR -->
+            <div class="tab-pane fade" id="tabulador">
+                <div class="card shadow-sm p-4">
+                    <h5>Tabulador Legal</h5>
+                    <form action="/rrhh/rules" method="POST" class="row g-3 mb-4">
+                        <div class="col-md-4"><input type="number" name="anios" class="form-control" placeholder="Años cumplidos" required></div>
+                        <div class="col-md-4"><input type="number" name="diasDerecho" class="form-control" placeholder="Días" required></div>
+                        <div class="col-md-4"><button type="submit" class="btn btn-dark w-100">Actualizar</button></div>
+                    </form>
+                    <table class="table table-sm w-50">
+                        <thead class="table-dark"><tr><th>Años</th><th>Días de Derecho</th></tr></thead>
+                        <tbody>
+                            <% rules.forEach(rule => { %><tr><td><%= rule.anios %> año(s)</td><td><%= rule.diasDerecho %> días</td></tr><% }) %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SECCIÓN IMPORTAR EXCEL -->
+            <div class="tab-pane fade" id="importar">
+                <div class="card shadow-sm p-5 text-center">
+                    <h4>Importar Excel (.xlsx)</h4>
+                    
+                    <!-- NUEVO: BOTÓN DE DESCARGAR PLANTILLA -->
+                    <div class="my-4">
+                        <a href="/rrhh/download-template" class="btn btn-outline-primary shadow-sm">
+                            <i class="bi bi-download"></i> Descargar Plantilla Oficial
+                        </a>
+                    </div>
+
+                    <form action="/rrhh/import-excel" method="POST" enctype="multipart/form-data" class="mt-3">
+                        <input type="file" name="excelFile" class="form-control w-50 mx-auto mb-3" required>
+                        <button type="submit" class="btn btn-success">Procesar Excel Subido</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function filtrarSol(estado, btn) {
+            const botones = btn.parentElement.querySelectorAll('button');
+            botones.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            const filas = document.querySelectorAll('.sol-row');
+            filas.forEach(fila => {
+                if (estado === 'Todas' || fila.getAttribute('data-estado') === estado) {
+                    fila.style.display = '';
+                } else {
+                    fila.style.display = 'none';
+                }
+            });
+        }
+        document.addEventListener('DOMContentLoaded', () => {
+            const btnPendientes = document.querySelector('button[onclick="filtrarSol(\'Pendiente\', this)"]');
+            if(btnPendientes) btnPendientes.click();
+        });
+    </script>
+</body>
+</html>
