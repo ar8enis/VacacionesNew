@@ -352,7 +352,7 @@ app.post('/nominas/export-sap', isAuthenticated, isNominas, async (req, res) => 
 
 // --- 7. INICIO ---
 const PORT = process.env.PORT || 3000;
-sequelize.sync().then(async () => {
+sequelize.sync({ force: true }).then(async () => {
     const adminExists = await User.findOne({ where: { username: 'admin' } });
     if (!adminExists) {
         await User.create({ username: 'admin', email: 'admin@empresa.com', password: 'adminpassword', role: 'Admin', mustChangePassword: false });
