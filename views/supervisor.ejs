@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Panel Supervisor - Vacaciones</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-top: 15px; }
+        .calendar-header { text-align: center; font-weight: bold; color: #6c757d; font-size: 0.9rem; }
+        .calendar-day { min-height: 90px; padding: 8px; border: 1px solid #e9ecef; border-radius: 8px; cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; align-items: center; }
+        .calendar-day:hover { background-color: #f1f3f5; transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .calendar-day.empty { background-color: transparent; border: none; cursor: default; }
+        .calendar-day.empty:hover { transform: none; box-shadow: none; }
+        .calendar-day.today { border: 2px solid #0d6efd; background-color: #f8fbff; }
+        .day-number { font-weight: bold; font-size: 1.1rem; margin-bottom: 5px; }
+    </style>
+</head>
+<body class="bg-light">
+
+    <nav class="navbar navbar-dark bg-dark shadow-sm mb-4">
+        <div class="container">
+            <a class="navbar-brand" href="#"><i class="bi bi-person-workspace"></i> Panel de Supervisor</a>
+            <div class="d-flex align-items-center">
+                <span class="text-white me-3">Hola, <%= currentUser %></span>
+                <a href="/logout" class="btn btn-outline-light btn-sm">Cerrar Sesión</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container pb-5">
+        <ul class="nav nav-tabs mb-4" id="supTabs">
+            <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#calendario"><b><i class="bi bi-calendar3"></i> Calendario Visual</b></button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#mi-equipo">Mi Equipo y Solicitudes</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#solicitudes">Historial</button></li>
+        </ul>
+
+        <div class="tab-content">
+            
+            <!-- PESTAÑA: CALENDARIO -->
+            <div class="tab-pane fade show active" id="calendario">
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="card shadow-sm p-4">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <button class="btn btn-outline-primary" onclick="cambiarMes(-1)"><i class="bi bi-chevron-left"></i> Mes Anterior</button>
+                                <h4 id="cal-month-year" class="mb-0 text-capitalize text-primary fw-bold">Mes Año</h4>
+                                <button class="btn btn-outline-primary" onclick="cambiarMes(1)">Siguiente <i class="bi bi-chevron-right"></i></button>
+                            </div>
+                            
+                            <div class="calendar-grid mb-2">
+                                <div class="calendar-header">Dom</div><div class="calendar-header">Lun</div><div class="calendar-header">Mar</div>
+                                <div class="calendar-header">Mié</div><div class="calendar-header">Jue</div><div class="calendar-header">Vie</div><div class="calendar-header">Sáb</div>
+                            </div>
+                            
+                            <div id="cal-grid" class="calendar-grid"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="card shadow-sm border-0 bg-white" style="border-radius: 12px;">
+                            <div class="card-header bg-primary text-white" style="border-radius: 12px 12px 0 0;">
+                                <h5 class="mb-0"><i class="bi bi-list-ul"></i> Detalles del Día</h5>
+                            </div>
+                            <div class="card-body" id="day-details">
+                                <div class="text-center text-muted p-4">
+                                    <i class="bi bi-hand-index-thumb" style="font-size: 2rem;"></i>
+                                    <p class="mt-2">Haz clic en un día del calendario para ver quiénes están de vacaciones.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PESTAÑA: MI EQUIPO Y SOLICITAR -->
+            <div class="tab-pane fade" id="mi-equipo">
+                <div class="card shadow-sm p-4 mb-4 border-primary">
+                    <h5 class="text-primary"><i class="bi bi-calendar-plus"></i> Solicitar Vacaciones</h5>
+                    <form action="/supervisor/solicitar" method="POST" class="row g-3 mt-1">
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold">Empleado</label>
+                            <select name="EmployeeId" class="form-select" required>
+                                <option value="">Selecciona a quién...</option>
+                                <% employees.forEach(emp => { %>
+                                    <% if (emp.activo) { %>
+                                        <option value="<%= emp.id %>" <%= emp.diasDisponibles <= 0 ? 'disabled' : '' %>>
+                                            <%= emp.nombre %> <%= emp.apellido %> (DNI: <%= emp.dni %>) - <%= emp.diasDisponibles %> días
+                                        </option>
+                                    <% } %>
+                                <% }) %>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-bold">Fecha Inicio</label>
+                            <input type="date" name="fechaInicio" id="fechaInicio" class="form-control" min="<%= minDateStr %>" required>
+                            <small class="text-muted" style="font-size:11px;">Mínimo 3 días de anticipación</small>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-bold">Fecha Fin</label>
+                            <input type="date" name="fechaFin" id="fechaFin" class="form-control" required>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-bold">Días a Descontar</label>
+                            <input type="number" step="0.5" name="diasSolicitados" class="form-control" placeholder="Ej: 3" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold">Motivo de solicitud</label>
+                            <input type="text" name="motivo" class="form-control" placeholder="Ej: Vacaciones anuales" required>
+                        </div>
+                        <div class="col-12 text-end">
+                            <button type="submit" class="btn btn-success px-5"><i class="bi bi-send"></i> Enviar a RRHH</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="card shadow-sm p-4">
+                    <h5>Mi Personal a Cargo</h5>
+                    <table class="table table-hover align-middle mt-3">
+                        <thead class="table-light">
+                            <tr><th>DNI</th><th>Nombre Completo</th><th>Área</th><th>Estado</th><th>Antigüedad</th><th>Saldo Vacaciones</th></tr>
+                        </thead>
+                        <tbody>
+                            <% if(employees.length === 0) { %><tr><td colspan="6" class="text-center text-muted">No tienes empleados asignados o activos.</td></tr><% } %>
+                            <% employees.forEach(emp => { %>
+                            <tr>
+                                <td><b><%= emp.dni %></b></td>
+                                <td><%= emp.nombre %> <%= emp.apellido %></td>
+                                <td><span class="badge bg-secondary"><%= emp.Area.nombre %></span></td>
+                                <td><% if(emp.activo) { %><span class="badge bg-success">Activo</span><% } else { %><span class="badge bg-danger">Baja</span><% } %></td>
+                                <td><%= emp.ultimoAnioProcesado %> años</td>
+                                <td><b class="<%= emp.diasDisponibles > 0 ? 'text-success' : 'text-danger' %>"><%= emp.diasDisponibles %> días</b></td>
+                            </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- PESTAÑA: HISTORIAL DE SOLICITUDES -->
+            <div class="tab-pane fade" id="solicitudes">
+                <div class="card shadow-sm p-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5>Historial de Solicitudes</h5>
+                        <div class="btn-group shadow-sm" role="group">
+                            <button type="button" class="btn btn-outline-primary active" onclick="filtrarSolSup('Pendiente', this)">Pendientes</button>
+                            <button type="button" class="btn btn-outline-success" onclick="filtrarSolSup('Aprobado', this)">Aprobadas</button>
+                            <button type="button" class="btn btn-outline-danger" onclick="filtrarSolSup('Rechazado', this)">Rechazadas</button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="filtrarSolSup('Todas', this)">Todas</button>
+                        </div>
+                    </div>
+                    
+                    <div class="table-responsive">
+                        <table class="table align-middle">
+                            <thead class="table-light">
+                                <tr><th>Fecha Solicitud</th><th>DNI</th><th>Empleado</th><th>Fechas</th><th>Días</th><th>Motivo</th><th>Estado</th><th>Notas RRHH</th></tr>
+                            </thead>
+                            <tbody>
+                                <% requests.forEach(req => { %>
+                                <tr class="sol-row-sup" data-estado="<%= req.estado %>">
+                                    <td class="text-muted"><%= new Date(req.createdAt).toLocaleDateString('es-ES') %></td>
+                                    <td><%= req.Employee.dni %></td>
+                                    <td><%= req.Employee.nombre %> <%= req.Employee.apellido %></td>
+                                    <td>Del <b><%= req.fechaInicio %></b> al <b><%= req.fechaFin %></b></td>
+                                    <td><%= req.diasSolicitados %></td>
+                                    <td class="text-muted fst-italic"><%= req.motivo %></td>
+                                    <td>
+                                        <% if(req.estado === 'Pendiente') { %><span class="badge bg-warning text-dark">Pendiente RRHH</span><% } %>
+                                        <% if(req.estado === 'Aprobado') { %><span class="badge bg-success">Aprobado</span><% } %>
+                                        <% if(req.estado === 'Rechazado') { %><span class="badge bg-danger">Rechazado</span><% } %>
+                                    </td>
+                                    <td>
+                                        <% if(req.estado === 'Rechazado' && req.motivoRechazo) { %>
+                                            <span class="text-danger small"><i class="bi bi-info-circle"></i> <%= req.motivoRechazo %></span>
+                                        <% } else { %> - <% } %>
+                                    </td>
+                                </tr>
+                                <% }) %>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- GUARDAR DATOS PARA EL CALENDARIO (MÉTODO LIMPIO SIN ERRORES VS CODE) -->
+    <script id="requestsData" type="application/json">
+        <%- JSON.stringify(requests) %>
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // ------------------------------------------
+        // LÓGICA DEL CALENDARIO VISUAL (CON FILTRO DE DÍAS HÁBILES)
+        // ------------------------------------------
+        const dataString = document.getElementById('requestsData').textContent;
+        const allRequests = JSON.parse(dataString);
+        const activeRequests = allRequests.filter(r => r.estado !== 'Rechazado');
+
+        const fechaActual = new Date();
+        let mesActual = fechaActual.getMonth();
+        let anioActual = fechaActual.getFullYear();
+        const nombresMeses =["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+
+        // MAGIA: Traduce el texto del turno ("L,M,J", "Lunes a Viernes") a días reales (0=Dom, 1=Lun...)
+        function esDiaHabil(dayIndex, shiftDaysStr) {
+            if (!shiftDaysStr) return true; // Si no tiene configuración, asume que trabaja
+            const s = shiftDaysStr.toLowerCase();
+            
+            if (s.includes('lunes a viernes') || s.includes('l a v')) return dayIndex >= 1 && dayIndex <= 5;
+            if (s.includes('lunes a sabado') || s.includes('l a s') || s.includes('sábado')) return dayIndex >= 1 && dayIndex <= 6;
+            
+            const tokens = s.replace(/y/g, ',').split(/[, -]+/).map(t => t.trim());
+            if (tokens.length === 0) return true;
+
+            for (let t of tokens) {
+                if (!t) continue;
+                if (dayIndex === 1 && (t === 'l' || t.startsWith('lun'))) return true;
+                if (dayIndex === 2 && (t === 'm' || t.startsWith('mar'))) return true;
+                if (dayIndex === 3 && (t === 'x' || t.startsWith('mi') || t === 'm')) return true; // 'm' es doble
+                if (dayIndex === 4 && (t === 'j' || t.startsWith('jue'))) return true;
+                if (dayIndex === 5 && (t === 'v' || t.startsWith('vie'))) return true;
+                if (dayIndex === 6 && (t === 's' || t.startsWith('sab') || t.startsWith('sáb'))) return true;
+                if (dayIndex === 0 && (t === 'd' || t.startsWith('dom'))) return true;
+            }
+            return false;
+        }
+
+        function renderizarCalendario(mes, anio) {
+            document.getElementById('cal-month-year').innerText = `${nombresMeses[mes]} ${anio}`;
+            const primerDiaMes = new Date(anio, mes, 1).getDay();
+            const diasEnMes = new Date(anio, mes + 1, 0).getDate();
+            const grid = document.getElementById('cal-grid');
+            grid.innerHTML = '';
+
+            for (let i = 0; i < primerDiaMes; i++) { grid.innerHTML += `<div class="calendar-day empty"></div>`; }
+
+            for (let i = 1; i <= diasEnMes; i++) {
+                const dateObj = new Date(anio, mes, i);
+                const dayOfWeek = dateObj.getDay();
+                const dateStr = `${anio}-${String(mes+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
+                
+                // Filtramos solicitudes que crucen este día Y que sea hábil para ese empleado
+                const reqsDelDia = activeRequests.filter(req => {
+                    const enRango = dateStr >= req.fechaInicio && dateStr <= req.fechaFin;
+                    if(!enRango) return false;
+                    const shiftStr = req.Employee.Shift ? req.Employee.Shift.diasLaborales : '';
+                    return esDiaHabil(dayOfWeek, shiftStr); // <-- AQUÍ APLICAMOS EL FILTRO
+                });
+
+                let indicadores = '';
+                if (reqsDelDia.length > 0) {
+                    let color = reqsDelDia.length >= 3 ? 'bg-danger' : (reqsDelDia.length === 2 ? 'bg-warning text-dark' : 'bg-success');
+                    indicadores = `<span class="badge ${color} rounded-pill mt-1" style="font-size:0.75rem;">${reqsDelDia.length} Ausente(s)</span>`;
+                }
+
+                const esHoy = (i === fechaActual.getDate() && mes === fechaActual.getMonth() && anio === fechaActual.getFullYear()) ? 'today' : '';
+                grid.innerHTML += `<div class="calendar-day ${esHoy}" onclick="mostrarDetallesDia('${dateStr}', ${i})"><div class="day-number">${i}</div>${indicadores}</div>`;
+            }
+        }
+
+        function cambiarMes(cambio) {
+            mesActual += cambio;
+            if (mesActual < 0) { mesActual = 11; anioActual--; }
+            if (mesActual > 11) { mesActual = 0; anioActual++; }
+            renderizarCalendario(mesActual, anioActual);
+            document.getElementById('day-details').innerHTML = `<div class="text-center text-muted p-4"><i class="bi bi-hand-index-thumb" style="font-size: 2rem;"></i><p class="mt-2">Haz clic en un día del calendario para ver los detalles.</p></div>`;
+        }
+
+        function mostrarDetallesDia(dateStr, dia) {
+            const dateObj = new Date(anioActual, mesActual, dia);
+            const dayOfWeek = dateObj.getDay();
+
+            const reqsDelDia = activeRequests.filter(req => {
+                const enRango = dateStr >= req.fechaInicio && dateStr <= req.fechaFin;
+                if(!enRango) return false;
+                const shiftStr = req.Employee.Shift ? req.Employee.Shift.diasLaborales : '';
+                return esDiaHabil(dayOfWeek, shiftStr); // <-- APLICAMOS EL FILTRO EN EL DETALLE
+            });
+
+            const container = document.getElementById('day-details');
+            if (reqsDelDia.length === 0) {
+                container.innerHTML = `<div class="text-center p-4"><i class="bi bi-calendar-check text-success" style="font-size: 2rem;"></i><h6 class="mt-3">Todo tu equipo está disponible</h6><p class="text-muted small">Nadie tiene vacaciones asignadas para el ${dia} de ${nombresMeses[mesActual]}.</p></div>`;
+                return;
+            }
+
+            let html = `<h6 class="border-bottom pb-2 mb-3">Ausencias reales: ${dia} de ${nombresMeses[mesActual]}</h6><div class="list-group list-group-flush">`;
+            reqsDelDia.forEach(req => {
+                const badge = req.estado === 'Aprobado' ? `<span class="badge bg-success"><i class="bi bi-check-circle"></i> Aprobado</span>` : `<span class="badge bg-warning text-dark"><i class="bi bi-clock"></i> Pendiente</span>`;
+                html += `
+                    <div class="list-group-item px-0 py-2 border-0 mb-2">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <strong class="mb-0 text-primary">${req.Employee.nombre} ${req.Employee.apellido}</strong>
+                            ${badge}
+                        </div>
+                        <div class="small text-muted mb-1"><i class="bi bi-diagram-3"></i> ${req.Employee.Area ? req.Employee.Area.nombre : 'N/A'}</div>
+                        <div class="small bg-light p-2 rounded border border-light">
+                            <i class="bi bi-calendar-range"></i> Rango solicitado: Del ${req.fechaInicio} al ${req.fechaFin}<br>
+                        </div>
+                    </div>`;
+            });
+            html += `</div>`;
+            container.innerHTML = html;
+        }
+
+        // ------------------------------------------
+        // LÓGICA DE FORMULARIOS Y FILTROS
+        // ------------------------------------------
+        const fInicio = document.getElementById('fechaInicio');
+        const fFin = document.getElementById('fechaFin');
+
+        fInicio.addEventListener('change', function() {
+            fFin.min = this.value; 
+            if(fFin.value && fFin.value < this.value) fFin.value = this.value; 
+        });
+
+        function filtrarSolSup(estado, btn) {
+            const botones = btn.parentElement.querySelectorAll('button');
+            botones.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const filas = document.querySelectorAll('.sol-row-sup');
+            filas.forEach(fila => {
+                if (estado === 'Todas' || fila.getAttribute('data-estado') === estado) fila.style.display = '';
+                else fila.style.display = 'none';
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const btnPendientes = document.querySelector('button[onclick="filtrarSolSup(\'Pendiente\', this)"]');
+            if(btnPendientes) btnPendientes.click();
+            renderizarCalendario(mesActual, anioActual);
+        });
+    </script>
+</body>
+</html>

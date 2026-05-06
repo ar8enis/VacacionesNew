@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Panel Nóminas - Vacaciones</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-top: 15px; }
+        .calendar-header { text-align: center; font-weight: bold; color: #6c757d; font-size: 0.9rem; }
+        .calendar-day { min-height: 90px; padding: 8px; border: 1px solid #e9ecef; border-radius: 8px; cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; align-items: center; }
+        .calendar-day:hover { background-color: #f1f3f5; transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .calendar-day.empty { background-color: transparent; border: none; cursor: default; }
+        .calendar-day.empty:hover { transform: none; box-shadow: none; }
+        .calendar-day.today { border: 2px solid #198754; background-color: #f8fff9; }
+        .day-number { font-weight: bold; font-size: 1.1rem; margin-bottom: 5px; }
+    </style>
+</head>
+<body class="bg-light">
+
+    <nav class="navbar navbar-dark bg-success shadow-sm mb-4">
+        <div class="container">
+            <a class="navbar-brand" href="#"><i class="bi bi-cash-coin"></i> Panel de Nóminas</a>
+            <div class="d-flex align-items-center">
+                <span class="text-white me-3">Hola, <%= currentUser %></span>
+                <a href="/logout" class="btn btn-outline-light btn-sm">Cerrar Sesión</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container pb-5">
+        
+        <!-- BOTÓN EXPORTAR A SAP -->
+        <div class="d-flex justify-content-end mb-3">
+            <button class="btn btn-warning shadow-sm" data-bs-toggle="modal" data-bs-target="#exportSapModal">
+                <i class="bi bi-file-earmark-excel"></i> <b>Generar Layout SAP</b>
+            </button>
+        </div>
+
+        <div class="row">
+            <div class="col-md-8">
+                <div class="card shadow-sm p-4">
+                    <h5 class="text-success mb-3"><i class="bi bi-calendar-check"></i> Calendario de Ausencias Aprobadas</h5>
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <button class="btn btn-outline-success" onclick="cambiarMes(-1)"><i class="bi bi-chevron-left"></i> Mes Anterior</button>
+                        <h4 id="cal-month-year" class="mb-0 text-capitalize text-success fw-bold">Mes Año</h4>
+                        <button class="btn btn-outline-success" onclick="cambiarMes(1)">Siguiente <i class="bi bi-chevron-right"></i></button>
+                    </div>
+                    
+                    <div class="calendar-grid mb-2">
+                        <div class="calendar-header">Dom</div><div class="calendar-header">Lun</div><div class="calendar-header">Mar</div>
+                        <div class="calendar-header">Mié</div><div class="calendar-header">Jue</div><div class="calendar-header">Vie</div>
+                        <div class="calendar-header">Sáb</div>
+                    </div>
+                    
+                    <div id="cal-grid" class="calendar-grid"></div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="card shadow-sm border-0 bg-white" style="border-radius: 12px;">
+                    <div class="card-header bg-success text-white" style="border-radius: 12px 12px 0 0;">
+                        <h5 class="mb-0"><i class="bi bi-building"></i> Detalle por Departamento</h5>
+                    </div>
+                    <div class="card-body" id="day-details">
+                        <div class="text-center text-muted p-4">
+                            <i class="bi bi-hand-index-thumb" style="font-size: 2rem;"></i>
+                            <p class="mt-2">Haz clic en un día del calendario para ver las ausencias confirmadas.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL PARA EXPORTAR A SAP -->
+    <div class="modal fade" id="exportSapModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title"><i class="bi bi-file-earmark-excel"></i> Exportar a SAP</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form action="/nominas/export-sap" method="POST">
+                    <div class="modal-body">
+                        <p class="small text-muted">Selecciona el periodo para generar el reporte de vacaciones aprobadas.</p>
+                        <div class="mb-3">
+                            <label class="fw-bold small">Desde:</label>
+                            <input type="date" name="fechaInicio" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="fw-bold small">Hasta:</label>
+                            <input type="date" name="fechaFin" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="fw-bold small">Nombre del archivo (sin .xlsx):</label>
+                            <input type="text" name="fileName" class="form-control" placeholder="Ej: Vacaciones_Semana_14" required>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-success w-100"><i class="bi bi-download"></i> Descargar Excel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- GUARDAR DATOS -->
+    <script id="requestsData" type="application/json">
+        <%- JSON.stringify(requests) %>
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const dataString = document.getElementById('requestsData').textContent;
+        const approvedRequests = JSON.parse(dataString);
+
+        const fechaActual = new Date();
+        let mesActual = fechaActual.getMonth();
+        let anioActual = fechaActual.getFullYear();
+        const nombresMeses =["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+
+        function esDiaHabil(dayIndex, shiftDaysStr) {
+            if (!shiftDaysStr || shiftDaysStr.trim() === '') return dayIndex >= 1 && dayIndex <= 5; 
+            const s = shiftDaysStr.toLowerCase();
+            if (s.includes('lunes a viernes') || s.includes('l a v')) return dayIndex >= 1 && dayIndex <= 5;
+            if (s.includes('lunes a sabado') || s.includes('l a s') || s.includes('sábado')) return dayIndex >= 1 && dayIndex <= 6;
+            
+            const tokens = s.replace(/y/g, ',').split(/[, -]+/).map(t => t.trim());
+            if (tokens.length === 0) return dayIndex >= 1 && dayIndex <= 5;
+
+            for (let t of tokens) {
+                if (!t) continue;
+                if (dayIndex === 1 && (t === 'l' || t.startsWith('lun'))) return true;
+                if (dayIndex === 2 && (t === 'm' || t.startsWith('mar'))) return true;
+                if (dayIndex === 3 && (t === 'x' || t.startsWith('mi') || t === 'm')) return true;
+                if (dayIndex === 4 && (t === 'j' || t.startsWith('jue'))) return true;
+                if (dayIndex === 5 && (t === 'v' || t.startsWith('vie'))) return true;
+                if (dayIndex === 6 && (t === 's' || t.startsWith('sab') || t.startsWith('sáb'))) return true;
+                if (dayIndex === 0 && (t === 'd' || t.startsWith('dom'))) return true;
+            }
+            return false;
+        }
+
+        function renderizarCalendario(mes, anio) {
+            document.getElementById('cal-month-year').innerText = `${nombresMeses[mes]} ${anio}`;
+            const primerDiaMes = new Date(anio, mes, 1).getDay();
+            const diasEnMes = new Date(anio, mes + 1, 0).getDate();
+            const grid = document.getElementById('cal-grid');
+            grid.innerHTML = '';
+
+            for (let i = 0; i < primerDiaMes; i++) { grid.innerHTML += `<div class="calendar-day empty"></div>`; }
+
+            for (let i = 1; i <= diasEnMes; i++) {
+                const dateObj = new Date(anio, mes, i);
+                const dayOfWeek = dateObj.getDay();
+                const dateStr = `${anio}-${String(mes+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
+                
+                const reqsDelDia = approvedRequests.filter(req => {
+                    const enRango = dateStr >= req.fechaInicio && dateStr <= req.fechaFin;
+                    if(!enRango) return false;
+                    const shiftStr = req.Employee.Shift ? req.Employee.Shift.diasLaborales : '';
+                    return esDiaHabil(dayOfWeek, shiftStr);
+                });
+
+                let indicadores = '';
+                if (reqsDelDia.length > 0) {
+                    let color = reqsDelDia.length >= 3 ? 'bg-danger' : (reqsDelDia.length === 2 ? 'bg-warning text-dark' : 'bg-success');
+                    indicadores = `<span class="badge ${color} rounded-pill mt-1" style="font-size:0.75rem;">${reqsDelDia.length} Ausente(s)</span>`;
+                }
+
+                const esHoy = (i === fechaActual.getDate() && mes === fechaActual.getMonth() && anio === fechaActual.getFullYear()) ? 'today' : '';
+                grid.innerHTML += `<div class="calendar-day ${esHoy}" onclick="mostrarDetallesDia('${dateStr}', ${i})"><div class="day-number">${i}</div>${indicadores}</div>`;
+            }
+        }
+
+        function cambiarMes(cambio) {
+            mesActual += cambio;
+            if (mesActual < 0) { mesActual = 11; anioActual--; }
+            if (mesActual > 11) { mesActual = 0; anioActual++; }
+            renderizarCalendario(mesActual, anioActual);
+            document.getElementById('day-details').innerHTML = `<div class="text-center text-muted p-4"><i class="bi bi-hand-index-thumb" style="font-size: 2rem;"></i><p class="mt-2">Haz clic en un día del calendario para ver las ausencias confirmadas de la nómina.</p></div>`;
+        }
+
+        function mostrarDetallesDia(dateStr, dia) {
+            const dateObj = new Date(anioActual, mesActual, dia);
+            const dayOfWeek = dateObj.getDay();
+
+            const reqsDelDia = approvedRequests.filter(req => {
+                const enRango = dateStr >= req.fechaInicio && dateStr <= req.fechaFin;
+                if(!enRango) return false;
+                const shiftStr = req.Employee.Shift ? req.Employee.Shift.diasLaborales : '';
+                return esDiaHabil(dayOfWeek, shiftStr);
+            });
+
+            const container = document.getElementById('day-details');
+            if (reqsDelDia.length === 0) {
+                container.innerHTML = `<div class="text-center p-4"><i class="bi bi-emoji-smile text-success" style="font-size: 2rem;"></i><h6 class="mt-3">Sin ausencias registradas</h6><p class="text-muted small">No hay vacaciones aprobadas para el ${dia} de ${nombresMeses[mesActual]}.</p></div>`;
+                return;
+            }
+
+            const agrupado = {};
+            reqsDelDia.forEach(req => {
+                const areaName = req.Employee.Area ? req.Employee.Area.nombre : 'Sin Departamento Asignado';
+                if (!agrupado[areaName]) agrupado[areaName] =[];
+                agrupado[areaName].push(req);
+            });
+
+            let html = `<h6 class="border-bottom pb-2 mb-3">Ausencias Aprobadas: ${dia} de ${nombresMeses[mesActual]}</h6>`;
+            
+            for (const[area, reqs] of Object.entries(agrupado)) {
+                html += `
+                    <div class="mb-4">
+                        <span class="badge bg-secondary mb-2 fs-6 w-100 text-start"><i class="bi bi-diagram-3"></i> ${area}</span>
+                        <div class="list-group list-group-flush shadow-sm border border-light">`;
+                
+                reqs.forEach(req => {
+                    html += `
+                        <div class="list-group-item px-3 py-2 bg-light mb-1 border-0 rounded">
+                            <strong class="text-success"><i class="bi bi-person"></i> ${req.Employee.nombre} ${req.Employee.apellido}</strong><br>
+                            <span class="small text-muted d-block mt-1"><b>DNI:</b> ${req.Employee.dni}</span>
+                            <span class="small text-muted"><b>Fechas:</b> ${req.fechaInicio} / ${req.fechaFin}</span>
+                        </div>`;
+                });
+                
+                html += `</div></div>`;
+            }
+            container.innerHTML = html;
+        }
+
+        document.addEventListener('DOMContentLoaded', () => { renderizarCalendario(mesActual, anioActual); });
+    </script>
+</body>
+</html>
